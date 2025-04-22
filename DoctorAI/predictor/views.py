@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth import login, authenticate
+from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth.decorators import login_required
 from .forms import GenomeForm
@@ -16,7 +16,7 @@ def register_view(request):
         form = UserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user)
+            login(request, user)  # Auto login after successful registration
             return redirect('dashboard')
     else:
         form = UserCreationForm()
@@ -37,6 +37,7 @@ def login_view(request):
 
 @login_required
 def dashboard(request):
+    prediction = None
     if request.method == 'POST':
         form = GenomeForm(request.POST, request.FILES)
         symptoms = request.POST.getlist('symptoms')
@@ -45,12 +46,26 @@ def dashboard(request):
             instance.user = request.user
             instance.symptoms = ','.join(symptoms)
             instance.save()
+
+            # Predict the disease using the uploaded genome file and selected symptoms
             prediction = predict_disease(instance.genome_file.path, symptoms)
-            return render(request, 'result.html', {'prediction': prediction})
+
+            return render(request, 'result.html', {
+                'prediction': prediction,
+                'file': instance.genome_file.name,
+                'symptoms': symptoms
+            })
     else:
         form = GenomeForm()
-    return render(request, 'main.html', {'form': form})
+
+    return render(request, 'main.html', {'form': form, 'prediction': prediction})
 
 
+@login_required
 def result(request):
     return render(request, 'result.html')
+
+
+def logout_view(request):
+    logout(request)
+    return redirect('login')
