@@ -1,39 +1,44 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth import login, authenticate, logout
-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.decorators import login_required
-from .forms import GenomeForm
-from .models import GenomeUpload
+from django.contrib import messages
+from .forms import CustomUserCreationForm, GenomeForm
+from .models import GenomeUpload, Profile
 from .ml_model import predict_disease
+from .forms import CustomUserCreationForm
 
 
 def homepage(request):
     return render(request, 'homepage.html')
 
-
 def register_view(request):
     if request.method == 'POST':
-        form = UserCreationForm(request.POST)
+        form = CustomUserCreationForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login(request, user)  # Auto login after successful registration
-            return redirect('dashboard')
+            form.save()  # Save the user to the database
+            return redirect('login')  # Redirect to login page after successful registration
+        else:
+            # If form is invalid, print the errors and send back the form
+            print(form.errors)
     else:
-        form = UserCreationForm()
+        form = CustomUserCreationForm()
+    
     return render(request, 'register.html', {'form': form})
 
 
 def login_view(request):
     if request.method == 'POST':
-        form = AuthenticationForm(data=request.POST)
-        if form.is_valid():
-            user = form.get_user()
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
             login(request, user)
             return redirect('dashboard')
-    else:
-        form = AuthenticationForm()
-    return render(request, 'login.html', {'form': form})
-
+        else:
+            messages.error(request, 'Invalid username or password.')
+    return render(request, 'homepage.html')
 
 @login_required
 def dashboard(request):
@@ -47,7 +52,7 @@ def dashboard(request):
             instance.symptoms = ','.join(symptoms)
             instance.save()
 
-            # Predict the disease using the uploaded genome file and selected symptoms
+            # Predict disease using ML model
             prediction = predict_disease(instance.genome_file.path, symptoms)
 
             return render(request, 'result.html', {
@@ -60,11 +65,9 @@ def dashboard(request):
 
     return render(request, 'main.html', {'form': form, 'prediction': prediction})
 
-
 @login_required
 def result(request):
     return render(request, 'result.html')
-
 
 def logout_view(request):
     logout(request)
